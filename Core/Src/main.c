@@ -73,6 +73,11 @@ uint32_t decay_timer = 0;
 
 float speed_kmh = 0.0f;
 
+float speed_sum = 0.0f;
+uint32_t speed_samples = 0;
+
+float avg_speed = 0.0f;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -152,6 +157,9 @@ if (new_pulse)
 
     speed_kmh = (WHEEL_LENGTH_M / period_s) * 3.6f;
 
+    // Kaupiam vidurkiui
+    speed_sum += speed_kmh;
+    speed_samples++;
 }
 
 // Jei impulsu nera ilgiau nei ...
@@ -161,16 +169,10 @@ if ((last_pulse_time != 0) && (pulse_period_ms != 0))
 
     if (elapsed_ms > ZERO_SPEED_TIMEOUT_MS)
     {
-        speed_kmh = 0.0f;
+    speed_kmh = 0.0f;
+    avg_speed = 0.0f;
     }
-		else if ((elapsed_ms > pulse_period_ms) &&
-						 (now - decay_timer >= 199))
-		{
-				decay_timer = now;
 
-				float elapsed_s = elapsed_ms / 1000.0f;
-				speed_kmh = (WHEEL_LENGTH_M / elapsed_s) * 3.6f;
-		}
 }
 
 
@@ -186,7 +188,7 @@ if (now - oled_timer >= 1000)
 	char line3[32];
 
 	sprintf(line1, "Speed:");
-	sprintf(line2, "%.1f km/h", speed_kmh);
+	sprintf(line2, "%.1f km/h", avg_speed);
 	sprintf(line3, "Pulses: %lu", pulse_count);
 
 	ssd1306_Fill(Black);
@@ -206,20 +208,27 @@ if (now - oled_timer >= 1000)
 // UART siuntimas kas 0.2 s
 if (now - uart_timer >= 200)
 {
-		uart_timer = now;
+    uart_timer = now;
 
-		char uart_buf[64];
+    // Jei buvo nauju matavimu
+    if (speed_samples > 0)
+    {
+        avg_speed = speed_sum / speed_samples;
 
-		sprintf(uart_buf,
-						"Speed: %.1f km/h | Period: %lu ms | Pulses: %lu\r\n",
-						speed_kmh,
-						pulse_period_ms,
-						pulse_count);
+        speed_sum = 0;
+        speed_samples = 0;
+    }
 
-		HAL_UART_Transmit(&huart2,
-											(uint8_t*)uart_buf,
-											strlen(uart_buf),
-											100);
+    char uart_buf[64];
+
+    sprintf(uart_buf,
+            "Speed AVG: %.1f km/h\r\n",
+            avg_speed);
+
+    HAL_UART_Transmit(&huart2,
+                      (uint8_t*)uart_buf,
+                      strlen(uart_buf),
+                      100);
 }
     /* USER CODE END WHILE */
 
